@@ -1,121 +1,182 @@
-!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Masum Demo Shop</title>
+<title>Masum Pro Mobile Shop</title>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.6.1/firebase-app.js";
+import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.6.1/firebase-database.js";
+import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.6.1/firebase-storage.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.6.1/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCiZkLpHJySpFFObFxm0X6plpMtyFyhVlw",
+  authDomain: "fir-shop-dfdea.firebaseapp.com",
+  projectId: "fir-shop-dfdea",
+  storageBucket: "fir-shop-dfdea.appspot.com",
+  messagingSenderId: "582913840954",
+  appId: "1:582913840954:web:256e41eb2cb2ae2e706203",
+  measurementId: "G-PVJM7FH1CL"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const storage = getStorage(app);
+const auth = getAuth(app);
+
+let isAdmin = false;
+const admins = ["admin@demo.com"];
+let cart = [];
+
+// --- AUTH ---
+window.registerUser = () => {
+  const email = prompt("Email:");
+  const pass = prompt("Password:");
+  createUserWithEmailAndPassword(auth,email,pass)
+    .then(()=>alert("Registered! Login now."))
+    .catch(err=>alert(err.message));
+};
+
+window.loginUser = () => {
+  const email = prompt("Email:");
+  const pass = prompt("Password:");
+  signInWithEmailAndPassword(auth,email,pass)
+    .then(user=>{ 
+      document.getElementById("user-email").innerText=user.user.email;
+      checkAdmin(user.user.email);
+      loadProducts();
+    })
+    .catch(err=>alert(err.message));
+};
+
+window.logoutUser = () => {
+  signOut(auth).then(()=>{
+    document.getElementById("user-email").innerText="";
+    document.getElementById("admin-panel").style.display="none";
+    cart=[];
+    document.getElementById("cart-count").innerText=0;
+  });
+};
+
+const checkAdmin=(email)=>{
+  if(admins.includes(email)){
+    isAdmin=true;
+    document.getElementById("admin-panel").style.display="block";
+  } else {
+    isAdmin=false;
+    document.getElementById("admin-panel").style.display="none";
+  }
+};
+
+// --- PRODUCTS ---
+window.loadProducts = ()=>{
+  const prodSection = document.getElementById("products");
+  prodSection.innerHTML="";
+  onValue(ref(db,'products'),snapshot=>{
+    prodSection.innerHTML="";
+    snapshot.forEach(childSnap=>{
+      const data = childSnap.val();
+      const id = childSnap.key;
+      const div = document.createElement("div");
+      div.className="card";
+      div.innerHTML=`
+        <img src="${data.image||'https://via.placeholder.com/150'}" style="width:100%;border-radius:10px;">
+        <h3>${data.name}</h3>
+        <p class="price">৳ ${data.price}</p>
+        <button onclick="addToCart('${id}','${data.name}',${data.price})">Add to Cart</button>
+        ${isAdmin?`<button style="background:red;margin-top:5px;" onclick="deleteProduct('${id}')">Delete</button>`:""}
+      `;
+      prodSection.appendChild(div);
+    });
+  });
+};
+
+window.addProduct = async ()=>{
+  const name = prompt("Product Name:");
+  const price = prompt("Product Price:");
+  const fileInput = document.createElement("input");
+  fileInput.type="file";
+  fileInput.accept="image/*";
+  fileInput.onchange=async()=>{
+    const file = fileInput.files[0];
+    const storageRef = sRef(storage,'products/'+file.name);
+    await uploadBytes(storageRef,file);
+    const url = await getDownloadURL(storageRef);
+    push(ref(db,'products'),{name,price,image:url});
+    loadProducts();
+  };
+  fileInput.click();
+};
+
+window.deleteProduct = (id)=>{
+  remove(ref(db,'products/'+id));
+};
+
+// --- CART & CHECKOUT ---
+window.addToCart=(id,name,price)=>{
+  cart.push({id,name,price});
+  document.getElementById("cart-count").innerText=cart.length;
+};
+
+window.checkout = ()=>{
+  if(cart.length===0){ alert("Cart empty!"); return; }
+  let total = cart.reduce((a,b)=>a+b.price,0);
+  if(confirm(`Total ৳ ${total}. Place order? (Demo Payment)`)){
+    const ordersRef = ref(db,'orders');
+    cart.forEach(item=>push(ordersRef,item));
+    cart=[];
+    document.getElementById("cart-count").innerText=0;
+    alert("Order Placed! (Demo Payment)");
+  }
+};
+
+auth.onAuthStateChanged(user=>{ if(user) checkAdmin(user.email); loadProducts(); });
+
+</script>
+
 <style>
-body {
-    font-family: Arial, sans-serif;
-    margin: 0;
-    background: #f4f4f4;
-}
-
-header {
-    background: #0d6efd;
-    color: white;
-    padding: 15px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.logo {
-    font-size: 20px;
-    font-weight: bold;
-}
-
-.cart {
-    background: white;
-    color: #0d6efd;
-    padding: 5px 10px;
-    border-radius: 20px;
-}
-
-.products {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 20px;
-    padding: 20px;
-}
-
-.card {
-    background: white;
-    padding: 15px;
-    border-radius: 10px;
-    text-align: center;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-}
-
-.card img {
-    width: 100%;
-    border-radius: 10px;
-}
-
-.card h3 {
-    margin: 10px 0;
-}
-
-.price {
-    color: green;
-    font-weight: bold;
-}
-
-button {
-    background: #0d6efd;
-    color: white;
-    border: none;
-    padding: 8px 15px;
-    border-radius: 5px;
-    cursor: pointer;
-}
-
-button:hover {
-    background: #084298;
-}
+body{font-family:Arial;margin:0;background:#f4f4f4;}
+body.dark{background:#121212;color:white;}
+header{background:#0d6efd;color:white;padding:10px;display:flex;justify-content:space-between;align-items:center;}
+header span{font-size:14px;}
+#auth-buttons{margin:10px;}
+#auth-buttons button{margin-right:5px;}
+.products{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:10px;}
+.card{background:white;padding:10px;border-radius:10px;text-align:center;box-shadow:0 2px 5px rgba(0,0,0,0.1);}
+body.dark .card{background:#1e1e1e;}
+.card h3{margin:5px 0;}
+.price{color:green;font-weight:bold;}
+button{background:#0d6efd;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;}
+button:hover{background:#084298;}
+body.dark button{background:#0b3d91;}
+#admin-panel{display:none;background:#eee;padding:10px;margin:10px;border-radius:10px;}
 </style>
+
 </head>
 <body>
 
 <header>
-    <div class="logo">Masum Demo Shop</div>
-    <div class="cart">Cart: <span id="cart-count">0</span></div>
+  <div>Masum Pro Mobile Shop <span id="user-email"></span></div>
+  <div class="cart" onclick="checkout()">Cart: <span id="cart-count">0</span></div>
 </header>
 
-<section class="products">
-
-<div class="card">
-    <img src="https://via.placeholder.com/250" alt="Product">
-    <h3>Stylish T-Shirt</h3>
-    <p class="price">৳ 550</p>
-    <button onclick="addToCart()">Add to Cart</button>
+<div id="auth-buttons">
+  <button onclick="registerUser()">Register</button>
+  <button onclick="loginUser()">Login</button>
+  <button onclick="logoutUser()">Logout</button>
+  <button onclick="document.body.classList.toggle('dark')">Toggle Dark Mode</button>
 </div>
 
-<div class="card">
-    <img src="https://via.placeholder.com/250" alt="Product">
-    <h3>Smart Watch</h3>
-    <p class="price">৳ 1200</p>
-    <button onclick="addToCart()">Add to Cart</button>
+<div id="admin-panel">
+  <h3>Admin Panel</h3>
+  <button onclick="addProduct()">Add Product (Upload Image)</button>
 </div>
 
-<div class="card">
-    <img src="https://via.placeholder.com/250" alt="Product">
-    <h3>Running Shoes</h3>
-    <p class="price">৳ 2200</p>
-    <button onclick="addToCart()">Add to Cart</button>
-</div>
-
+<section id="products" class="products">
+<!-- Products will load here -->
 </section>
-
-<script>
-let cartCount = 0;
-
-function addToCart() {
-    cartCount++;
-    document.getElementById("cart-count").innerText = cartCount;
-    alert("Product added to cart!");
-}
-</script>
 
 </body>
 </html>
